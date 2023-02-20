@@ -1,63 +1,34 @@
-local data, n, dir = {}, 0, shell.dir()
+local data, n, dir, p, pe = {}, 0, shell.dir(), print, os.pullEvent
 
---- Receive data and store it in the table.
-local function receive_data()
-  local _, y = term.getCursorPos()
-  while true do
-    data[#data + 1] = select(2, os.pullEvent "paste")
-    term.clearLine()
-    term.setCursorPos(1, y)
-    term.write(tostring(#data))
-  end
-end
-
---- Wait for the Q key to be pressed
-local function wait_for_quit()
-  repeat
-    local _, key = os.pullEvent "key"
-  until key == keys.q
-end
-
---- Write the file.
----@param filename string The file to be written to.
-local function write(filename)
-  local h, err = io.open(filename, 'w')
-  if not h then
-    error("Failed to open file to write: " .. tostring(err), 0)
-  end
-
-  for _, line in ipairs(data) do
-    h:write(line .. '\n')
-  end
-  h:close()
-end
-
-local function confirm(filename)
-  print(("\nPlease confirm the following:\n\nLines received: %d\n\nFilename: %s\n\nY/N: ?"):format(#data, filename))
-
-  repeat
-    local _, key = os.pullEvent "key"
-    if key == keys.y then
-      return true
-    elseif key == keys.n then
-      return false
-    end
-  until false
-end
-
-local filename = ...
-if not filename then
-  error("Expected filename as argument.", 0)
-end
+local filename = assert(..., "Expected filename.")
 filename = fs.combine(dir, filename)
 
-print("Ready to receive data. Press 'q' to stop.")
+p(("Writing to: %s"):format(filename))
+p "Press 'q' to stop and write the file."
+p "Hold ctrl+t to cancel."
 
-parallel.waitForAny(receive_data, wait_for_quit)
+parallel.waitForAny(
+  function()
+    while true do
+      data[#data + 1] = select(2, pe "paste")
+    end
+  end,
+  function()
+    repeat
+      local _, key = pe "key"
+    until key == keys.q
+  end
+)
 
-if confirm(filename) then
-  write(filename)
-  print("Written.")
+local h, err = fs.open(filename, 'w')
+if not h then
+  error(("Failed to write file: %s"):format(err))
 end
 
-sleep() -- eat any key events remaining
+for _, line in ipairs(data) do
+  h.writeLine(line)
+end
+h.close()
+p "Done."
+
+sleep() -- eat any remaining events in the queue
